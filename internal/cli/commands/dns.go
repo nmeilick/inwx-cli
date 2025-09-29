@@ -400,7 +400,9 @@ func createDNSRecord(c *cli.Context) error {
 	if err := client.Login(ctx); err != nil {
 		return err
 	}
-	defer client.Logout(ctx)
+	defer func() {
+		_ = client.Logout(ctx)
+	}()
 
 	record := inwx.DNSRecord{
 		Domain:  domain,
@@ -456,7 +458,9 @@ func updateDNSRecord(c *cli.Context) error {
 	if err := client.Login(ctx); err != nil {
 		return err
 	}
-	defer client.Logout(ctx)
+	defer func() {
+		_ = client.Logout(ctx)
+	}()
 
 	updates := inwx.DNSRecord{
 		Type:    recordType,

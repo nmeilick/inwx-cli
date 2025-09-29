@@ -56,7 +56,7 @@ func (f *CSVFormatter) FormatDomains(domains []inwx.Domain) string {
 	// Write domains
 	for _, domain := range domains {
 		row := []string{domain.Name, domain.Status}
-		writer.Write(row)
+		_ = writer.Write(row)
 	}
 
 	writer.Flush()
@@ -69,7 +69,7 @@ func (f *CSVFormatter) FormatAccountInfo(info *inwx.AccountInfo) string {
 
 	// Write header
 	header := []string{"Field", "Value"}
-	writer.Write(header)
+	_ = writer.Write(header)
 
 	// Write account info
 	rows := [][]string{
@@ -93,7 +93,7 @@ func (f *CSVFormatter) FormatBackupEntries(entries []*inwx.BackupEntry) string {
 
 	// Write header
 	header := []string{"ID", "Timestamp", "Operation", "Domain", "Name", "Type", "Content", "TTL", "Priority"}
-	writer.Write(header)
+	_ = writer.Write(header)
 
 	// Write entries
 	for _, entry := range entries {
