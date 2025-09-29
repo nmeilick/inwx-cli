@@ -613,7 +613,7 @@ func exportDNSRecords(c *cli.Context) error {
 	}
 	defer func() {
 		log.Debug().Msg("Logging out")
-		client.Logout(ctx)
+		_ = client.Logout(ctx)
 	}()
 
 	domain := c.String("domain")
@@ -755,7 +755,7 @@ func importDNSRecords(c *cli.Context) error {
 	if err := client.Login(ctx); err != nil {
 		return err
 	}
-	defer client.Logout(ctx)
+	defer func() { _ = client.Logout(ctx) }()
 
 	// Parse records to import
 	var recordsToImport []inwx.DNSRecord

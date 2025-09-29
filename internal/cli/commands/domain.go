@@ -32,7 +32,7 @@ func listDomains(c *cli.Context) error {
 	if err := client.Login(ctx); err != nil {
 		return err
 	}
-	defer client.Logout(ctx)
+	defer func() { _ = client.Logout(ctx) }()
 
 	domain := client.Domain()
 	domains, err := domain.List(ctx)

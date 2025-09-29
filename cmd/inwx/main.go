@@ -17,7 +17,7 @@ var (
 func main() {
 	app := cli.NewApp()
 	app.Version = Version
-	
+
 	if err := app.Run(os.Args); err != nil {
 		// Print the error to stderr to ensure the user sees the cause of the failure
 		fmt.Fprintln(os.Stderr, err)
