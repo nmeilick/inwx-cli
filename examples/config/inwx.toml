@@ -1,0 +1,14 @@
+[api]
+endpoint = "https://api.domrobot.com/jsonrpc/"
+username = "your_username"
+password = "your_password"
+timeout = 30
+test_mode = false
+
+[output]
+format = "table"
+colors = true
+
+[logging]
+level = "warn"  # trace, debug, info, warn, error, fatal
+colors = true   # auto-disabled if stderr is no TTY
