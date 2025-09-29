@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -808,7 +807,6 @@ func importDNSRecords(c *cli.Context) error {
 	log.Info().Msgf("Successfully imported %d DNS records for domain %s", len(recordsToImport), domain)
 	return nil
 }
-
 
 // getRecordsByIDs retrieves records by their IDs
 func getRecordsByIDs(ctx context.Context, client *inwx.Client, ids []string) ([]inwx.DNSRecord, error) {
