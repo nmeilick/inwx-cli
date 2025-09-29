@@ -32,7 +32,9 @@ func accountInfo(c *cli.Context) error {
 	if err := client.Login(ctx); err != nil {
 		return err
 	}
-	defer client.Logout(ctx)
+	defer func() {
+		_ = client.Logout(ctx)
+	}()
 
 	account := client.Account()
 	info, err := account.Info(ctx)

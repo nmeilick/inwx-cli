@@ -197,8 +197,8 @@ func (t *Transport) isRetryableError(err error) bool {
 		return true
 	}
 
-	// Check for temporary DNS errors
-	if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
+	// Check for temporary DNS errors (note: Temporary() is deprecated but still used for compatibility)
+	if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
 		return true
 	}
 

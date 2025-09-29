@@ -20,7 +20,7 @@ func (f *CSVFormatter) FormatDNSRecords(records []inwx.DNSRecord) string {
 
 	// Write header
 	header := []string{"ID", "Domain", "Name", "Type", "Content", "TTL", "Priority"}
-	writer.Write(header)
+	_ = writer.Write(header)
 
 	// Write records
 	for _, record := range records {
@@ -38,7 +38,7 @@ func (f *CSVFormatter) FormatDNSRecords(records []inwx.DNSRecord) string {
 			strconv.Itoa(record.TTL),
 			strconv.Itoa(record.Prio),
 		}
-		writer.Write(row)
+		_ = writer.Write(row)
 	}
 
 	writer.Flush()
@@ -51,7 +51,7 @@ func (f *CSVFormatter) FormatDomains(domains []inwx.Domain) string {
 
 	// Write header
 	header := []string{"Domain", "Status"}
-	writer.Write(header)
+	_ = writer.Write(header)
 
 	// Write domains
 	for _, domain := range domains {
@@ -80,7 +80,7 @@ func (f *CSVFormatter) FormatAccountInfo(info *inwx.AccountInfo) string {
 	}
 
 	for _, row := range rows {
-		writer.Write(row)
+		_ = writer.Write(row)
 	}
 
 	writer.Flush()
@@ -113,7 +113,7 @@ func (f *CSVFormatter) FormatBackupEntries(entries []*inwx.BackupEntry) string {
 			strconv.Itoa(entry.Record.TTL),
 			strconv.Itoa(entry.Record.Prio),
 		}
-		writer.Write(row)
+		_ = writer.Write(row)
 	}
 
 	writer.Flush()

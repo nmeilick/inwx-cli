@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -326,7 +326,7 @@ func listDNSRecords(c *cli.Context) error {
 	}
 	defer func() {
 		log.Debug().Msg("Logging out")
-		client.Logout(ctx)
+		_ = client.Logout(ctx)
 	}()
 
 	useWildcard := c.Bool("wildcard")
@@ -670,7 +670,7 @@ func exportDNSRecords(c *cli.Context) error {
 			}
 
 			filename := filepath.Join(outputDir, fmt.Sprintf("%s.%s", d, ext))
-			if err := ioutil.WriteFile(filename, data, 0644); err != nil {
+			if err := os.WriteFile(filename, data, 0644); err != nil {
 				log.Warn().Err(err).Str("file", filename).Msg("Failed to write file")
 				continue
 			}
@@ -704,7 +704,7 @@ func exportDNSRecords(c *cli.Context) error {
 
 	if outputFile != "" {
 		log.Debug().Str("file", outputFile).Msg("Writing to file")
-		return ioutil.WriteFile(outputFile, data, 0644)
+		return os.WriteFile(outputFile, data, 0644)
 	}
 
 	fmt.Print(string(data))
@@ -712,7 +712,7 @@ func exportDNSRecords(c *cli.Context) error {
 }
 
 func importDNSRecords(c *cli.Context) error {
-	data, err := ioutil.ReadFile(c.String("file"))
+	data, err := os.ReadFile(c.String("file"))
 	if err != nil {
 		return err
 	}
@@ -809,16 +809,6 @@ func importDNSRecords(c *cli.Context) error {
 	return nil
 }
 
-// contains checks if a slice contains a string (case-insensitive)
-func contains(slice []string, item string) bool {
-	itemLower := strings.ToLower(item)
-	for _, s := range slice {
-		if strings.ToLower(s) == itemLower {
-			return true
-		}
-	}
-	return false
-}
 
 // getRecordsByIDs retrieves records by their IDs
 func getRecordsByIDs(ctx context.Context, client *inwx.Client, ids []string) ([]inwx.DNSRecord, error) {

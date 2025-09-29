@@ -142,9 +142,7 @@ func ValidateHostname(hostname string) error {
 	}
 
 	// Allow wildcards in hostnames
-	if strings.HasPrefix(hostname, "*.") {
-		hostname = hostname[2:]
-	}
+	hostname = strings.TrimPrefix(hostname, "*.")
 
 	return ValidateDomain(hostname)
 }
