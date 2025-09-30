@@ -8,6 +8,11 @@ import (
 	"github.com/nmeilick/inwx-cli/internal/api"
 )
 
+const (
+	// DefaultDNSTTL is the default TTL for DNS records in seconds
+	DefaultDNSTTL = 3600
+)
+
 type Environment int
 
 const (
@@ -16,10 +21,11 @@ const (
 )
 
 type Client struct {
-	transport *api.Transport
-	username  string
-	password  string
-	env       Environment
+	transport      *api.Transport
+	username       string
+	password       string
+	env            Environment
+	customEndpoint bool
 }
 
 type ClientOption func(*Client)
@@ -55,6 +61,13 @@ func WithUserAgent(userAgent string) ClientOption {
 	}
 }
 
+func WithEndpoint(endpoint string) ClientOption {
+	return func(c *Client) {
+		c.customEndpoint = true
+		c.transport.SetEndpoint(endpoint)
+	}
+}
+
 func NewClient(opts ...ClientOption) (*Client, error) {
 	client := &Client{
 		env: Production,
@@ -70,30 +83,36 @@ func NewClient(opts ...ClientOption) (*Client, error) {
 		opt(client)
 	}
 
-	var endpoint string
-	switch client.env {
-	case Testing:
-		endpoint = "https://api.ote.domrobot.com/jsonrpc/"
-	default:
-		endpoint = "https://api.domrobot.com/jsonrpc/"
+	// Only set default endpoint if no custom endpoint was provided
+	if !client.customEndpoint {
+		var endpoint string
+		switch client.env {
+		case Testing:
+			endpoint = "https://api.ote.domrobot.com/jsonrpc/"
+		default:
+			endpoint = "https://api.domrobot.com/jsonrpc/"
+		}
+		client.transport.SetEndpoint(endpoint)
 	}
-	client.transport.SetEndpoint(endpoint)
 
 	return client, nil
 }
 
+// Login authenticates with the INWX API using the configured credentials
 func (c *Client) Login(ctx context.Context) error {
 	return c.transport.Login(ctx, c.username, c.password)
 }
 
+// Logout ends the current API session
 func (c *Client) Logout(ctx context.Context) error {
 	return c.transport.Logout(ctx)
 }
 
+// DNS creates a new DNS service instance with the specified options
 func (c *Client) DNS(opts ...DNSOption) *DNSService {
 	service := &DNSService{
 		client:     c,
-		defaultTTL: 3600,
+		defaultTTL: DefaultDNSTTL,
 	}
 
 	for _, opt := range opts {

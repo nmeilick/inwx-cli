@@ -15,6 +15,7 @@ type AccountInfo struct {
 	Email      string `json:"email"`
 }
 
+// Account creates a new account service instance for managing account information
 func (c *Client) Account() *AccountService {
 	return &AccountService{
 		client: c,
@@ -28,7 +29,13 @@ func (s *AccountService) Info(ctx context.Context) (*AccountInfo, error) {
 	}
 
 	info := &AccountInfo{}
-	if resData, ok := response["resData"].(map[string]interface{}); ok {
+
+	// Safety check: ensure response is not nil
+	if response == nil {
+		return info, nil
+	}
+
+	if resData, ok := response["resData"].(map[string]interface{}); ok && resData != nil {
 		if accountID, ok := resData["accountId"].(float64); ok {
 			info.AccountID = int(accountID)
 		}

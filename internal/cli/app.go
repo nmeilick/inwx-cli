@@ -15,6 +15,12 @@ func NewApp() *cli.App {
 				Name:    "config",
 				Aliases: []string{"c"},
 				Usage:   "Load configuration from `FILE`",
+				EnvVars: []string{"INWX_CONFIG"},
+			},
+			&cli.StringFlag{
+				Name:    "endpoint",
+				Usage:   "API endpoint URL (overrides test/production environment)",
+				EnvVars: []string{"INWX_ENDPOINT"},
 			},
 			&cli.StringFlag{
 				Name:    "username",
@@ -33,6 +39,12 @@ func NewApp() *cli.App {
 				Aliases: []string{"t"},
 				Usage:   "Use test environment",
 				EnvVars: []string{"INWX_TEST"},
+			},
+			&cli.IntFlag{
+				Name:    "timeout",
+				Usage:   "API request timeout in seconds",
+				Value:   30,
+				EnvVars: []string{"INWX_TIMEOUT"},
 			},
 			&cli.StringFlag{
 				Name:    "output",

@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 
+	"github.com/rs/zerolog/log"
 	"github.com/urfave/cli/v2"
 
 	"github.com/nmeilick/inwx-cli/internal/cli/output"
@@ -33,7 +34,9 @@ func accountInfo(c *cli.Context) error {
 		return err
 	}
 	defer func() {
-		_ = client.Logout(ctx)
+		if err := client.Logout(ctx); err != nil {
+			log.Error().Err(err).Msg("Failed to logout")
+		}
 	}()
 
 	account := client.Account()

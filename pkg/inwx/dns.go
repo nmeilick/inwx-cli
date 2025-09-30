@@ -48,6 +48,36 @@ func WithDomain(domain string) DNSOption {
 	}
 }
 
+// ValidateDomainOwnership checks if the user owns the specified domain
+func (s *DNSService) ValidateDomainOwnership(ctx context.Context, domain string) error {
+	// Use service's configured domain if no domain parameter provided
+	if domain == "" {
+		domain = s.domain
+	}
+	if domain == "" {
+		return fmt.Errorf("domain cannot be empty")
+	}
+
+	// Get list of domains owned by the user
+	domainService := s.client.Domain()
+	domains, err := domainService.List(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list domains: %w", err)
+	}
+
+	// Check if the requested domain is in the list
+	for _, d := range domains {
+		if d.Name == domain {
+			log.Debug().
+				Str("domain", domain).
+				Msg("Domain ownership validated")
+			return nil
+		}
+	}
+
+	return fmt.Errorf("domain '%s' not found in your account - please check the domain name and ensure you have access to it", domain)
+}
+
 func WithDefaultTTL(ttl int) DNSOption {
 	return func(s *DNSService) {
 		s.defaultTTL = ttl
@@ -77,6 +107,8 @@ type RecordQuery struct {
 	Types   []string
 	Name    string
 	Content string
+	TTL     int
+	Prio    int
 }
 
 func WithRecordType(types ...string) RecordFilter {
@@ -106,8 +138,13 @@ func WithRecordID(id int) RecordFilter {
 
 func WithRecordTTL(ttl int) RecordFilter {
 	return func(q *RecordQuery) {
-		// This would be used for TTL-based filtering
-		// Implementation depends on API capabilities
+		q.TTL = ttl
+	}
+}
+
+func WithRecordPriority(prio int) RecordFilter {
+	return func(q *RecordQuery) {
+		q.Prio = prio
 	}
 }
 
@@ -162,6 +199,12 @@ func (s *DNSService) ListRecords(ctx context.Context, filters ...RecordFilter) (
 	if query.Content != "" {
 		params["content"] = query.Content
 	}
+	if query.TTL > 0 {
+		params["ttl"] = query.TTL
+	}
+	if query.Prio > 0 {
+		params["prio"] = query.Prio
+	}
 
 	log.Debug().
 		Interface("params", params).
@@ -189,6 +232,12 @@ func (s *DNSService) listRecordsMultipleTypes(ctx context.Context, query *Record
 		}
 		if query.Content != "" {
 			params["content"] = query.Content
+		}
+		if query.TTL > 0 {
+			params["ttl"] = query.TTL
+		}
+		if query.Prio > 0 {
+			params["prio"] = query.Prio
 		}
 
 		log.Debug().
@@ -288,6 +337,12 @@ func (s *DNSService) listAllRecords(ctx context.Context, query *RecordQuery) ([]
 				if query.Content != "" {
 					params["content"] = query.Content
 				}
+				if query.TTL > 0 {
+					params["ttl"] = query.TTL
+				}
+				if query.Prio > 0 {
+					params["prio"] = query.Prio
+				}
 
 				log.Debug().
 					Str("domain", domain).
@@ -324,6 +379,12 @@ func (s *DNSService) listAllRecords(ctx context.Context, query *RecordQuery) ([]
 		if query.Content != "" {
 			params["content"] = query.Content
 		}
+		if query.TTL > 0 {
+			params["ttl"] = query.TTL
+		}
+		if query.Prio > 0 {
+			params["prio"] = query.Prio
+		}
 
 		log.Debug().
 			Str("domain", domain).
@@ -349,13 +410,25 @@ func (s *DNSService) listAllRecords(ctx context.Context, query *RecordQuery) ([]
 func (s *DNSService) parseRecordsFromResponse(response map[string]interface{}, domain string) []DNSRecord {
 	var records []DNSRecord
 
+	// Safety check: ensure response is not nil
+	if response == nil {
+		log.Warn().Msg("Received nil response")
+		return records
+	}
+
 	log.Debug().
 		Interface("response", response).
 		Str("domain", domain).
 		Msg("nameserver.info response")
 
 	// Debug the response structure
-	if resData, ok := response["resData"].(map[string]interface{}); ok {
+	resData, ok := response["resData"].(map[string]interface{})
+	if !ok {
+		log.Warn().Msg("Response missing resData field")
+		return records
+	}
+
+	if resData != nil {
 		log.Debug().
 			Interface("resData", resData).
 			Msg("Processing resData")
@@ -466,9 +539,11 @@ func (s *DNSService) CreateRecord(ctx context.Context, record DNSRecord) (*DNSRe
 			}
 
 			createdRecord = record
-			if resData, ok := response["resData"].(map[string]interface{}); ok {
-				if id, ok := resData["id"].(float64); ok {
-					createdRecord.ID = int(id)
+			if response != nil {
+				if resData, ok := response["resData"].(map[string]interface{}); ok && resData != nil {
+					if id, ok := resData["id"].(float64); ok {
+						createdRecord.ID = int(id)
+					}
 				}
 			}
 
@@ -488,9 +563,11 @@ func (s *DNSService) CreateRecord(ctx context.Context, record DNSRecord) (*DNSRe
 		return nil, err
 	}
 
-	if resData, ok := response["resData"].(map[string]interface{}); ok {
-		if id, ok := resData["id"].(float64); ok {
-			record.ID = int(id)
+	if response != nil {
+		if resData, ok := response["resData"].(map[string]interface{}); ok && resData != nil {
+			if id, ok := resData["id"].(float64); ok {
+				record.ID = int(id)
+			}
 		}
 	}
 
@@ -521,7 +598,7 @@ func (s *DNSService) UpdateRecord(ctx context.Context, id int, updates DNSRecord
 	// Use atomic backup if available
 	if s.backupStore != nil {
 		// Get the current record state before making changes
-		originalRecord, err := s.getRecordByID(ctx, id)
+		originalRecord, err := s.GetRecord(ctx, id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get original record for backup: %w", err)
 		}
@@ -553,6 +630,77 @@ func (s *DNSService) UpdateRecord(ctx context.Context, id int, updates DNSRecord
 	return &updates, nil
 }
 
+// UpdateRecords updates multiple DNS records at once using the API's batch capability.
+// This is significantly more efficient than calling UpdateRecord multiple times.
+// Note: All records will be updated with the same field values provided in updates.
+func (s *DNSService) UpdateRecords(ctx context.Context, ids []int, updates DNSRecord) error {
+	if len(ids) == 0 {
+		return fmt.Errorf("no record IDs provided")
+	}
+
+	params := map[string]interface{}{
+		"id": ids,
+	}
+
+	if updates.Name != "" {
+		params["name"] = updates.Name
+	}
+	if updates.Type != "" {
+		params["type"] = updates.Type
+	}
+	if updates.Content != "" {
+		params["content"] = updates.Content
+	}
+	if updates.TTL > 0 {
+		params["ttl"] = updates.TTL
+	}
+	if updates.Prio > 0 {
+		params["prio"] = updates.Prio
+	}
+
+	// Use atomic backup if available
+	if s.backupStore != nil {
+		// Get original state of all records before making changes
+		var originalRecords []DNSRecord
+		for _, id := range ids {
+			originalRecord, err := s.GetRecord(ctx, id)
+			if err != nil {
+				return fmt.Errorf("failed to get original record %d for backup: %w", id, err)
+			}
+			originalRecords = append(originalRecords, *originalRecord)
+		}
+
+		// Create backup entries for all records
+		for _, original := range originalRecords {
+			context := map[string]interface{}{
+				"command": "batch_update",
+				"params":  params,
+				"ids":     ids,
+			}
+
+			_, err := s.backupStore.Save(OperationUpdate, original, context)
+			if err != nil {
+				log.Warn().
+					Err(err).
+					Int("id", original.ID).
+					Msg("Failed to create backup entry for batch update")
+			}
+		}
+	}
+
+	// Perform the batch update
+	_, err := s.client.transport.Call(ctx, "nameserver.updateRecord", params)
+	if err != nil {
+		return fmt.Errorf("batch update failed: %w", err)
+	}
+
+	log.Info().
+		Int("count", len(ids)).
+		Msg("Successfully updated records in batch")
+
+	return nil
+}
+
 func (s *DNSService) DeleteRecord(ctx context.Context, id int) error {
 	params := map[string]interface{}{
 		"id": id,
@@ -561,7 +709,7 @@ func (s *DNSService) DeleteRecord(ctx context.Context, id int) error {
 	// Use atomic backup if available
 	if s.backupStore != nil {
 		// Get the current record state before deletion
-		recordToDelete, err := s.getRecordByID(ctx, id)
+		recordToDelete, err := s.GetRecord(ctx, id)
 		if err != nil {
 			return fmt.Errorf("failed to get record for backup: %w", err)
 		}
@@ -628,38 +776,90 @@ func (s *DNSService) ImportRecords(ctx context.Context, data []byte, format Impo
 		return err
 	}
 
+	// Get existing records to ensure idempotency
+	existingRecords, err := s.ListRecords(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list existing records: %w", err)
+	}
+
+	// Create a map of existing records for quick lookup
+	existingMap := make(map[string]bool)
+	for _, existing := range existingRecords {
+		key := fmt.Sprintf("%s|%s|%s|%s", existing.Domain, existing.Name, existing.Type, existing.Content)
+		existingMap[key] = true
+	}
+
+	// Import records, skipping those that already exist
+	skippedCount := 0
 	for _, record := range records {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		if record.Domain == "" {
 			record.Domain = s.domain
 		}
 		if record.TTL == 0 {
 			record.TTL = s.defaultTTL
 		}
+
+		// Check if record already exists
+		key := fmt.Sprintf("%s|%s|%s|%s", record.Domain, record.Name, record.Type, record.Content)
+		if existingMap[key] {
+			log.Debug().
+				Str("name", record.Name).
+				Str("type", record.Type).
+				Msg("Skipping existing record")
+			skippedCount++
+			continue
+		}
+
 		_, err := s.CreateRecord(ctx, record)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to create record %s (%s): %w", record.Name, record.Type, err)
 		}
+	}
+
+	if skippedCount > 0 {
+		log.Info().
+			Int("skipped", skippedCount).
+			Msg("Skipped existing records for idempotency")
 	}
 
 	return nil
 }
 
-// getRecordByID retrieves a specific DNS record by its ID
-func (s *DNSService) getRecordByID(ctx context.Context, id int) (*DNSRecord, error) {
-	// Get all records and find the one with matching ID
-	// This is not optimal but necessary since the API doesn't support direct ID lookup
-	records, err := s.ListRecords(ctx)
+// GetRecord retrieves a specific DNS record by its ID using the API's recordId parameter
+func (s *DNSService) GetRecord(ctx context.Context, id int) (*DNSRecord, error) {
+	params := map[string]interface{}{
+		"recordId": id,
+	}
+
+	log.Debug().
+		Int("record_id", id).
+		Msg("Calling nameserver.info with recordId")
+
+	response, err := s.client.transport.Call(ctx, "nameserver.info", params)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list records: %w", err)
+		return nil, fmt.Errorf("API call failed: %w", err)
 	}
 
-	for _, record := range records {
-		if record.ID == id {
-			return &record, nil
-		}
+	// Parse the response - should contain exactly one record
+	records := s.parseRecordsFromResponse(response, "")
+	if len(records) == 0 {
+		return nil, fmt.Errorf("record with ID %d not found", id)
+	}
+	if len(records) > 1 {
+		log.Warn().
+			Int("record_id", id).
+			Int("count", len(records)).
+			Msg("API returned multiple records for single ID")
 	}
 
-	return nil, fmt.Errorf("record with ID %d not found", id)
+	return &records[0], nil
 }
 
 func (s *DNSService) ImportRecordsWithSync(ctx context.Context, records []DNSRecord, format ImportFormat) error {
@@ -686,6 +886,13 @@ func (s *DNSService) ImportRecordsWithSync(ctx context.Context, records []DNSRec
 
 	// Delete records that are not in the import
 	for _, existing := range existingRecords {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		key := fmt.Sprintf("%s|%s|%s|%s", existing.Domain, existing.Name, existing.Type, existing.Content)
 		if _, found := importMap[key]; !found {
 			// Skip SOA records as they shouldn't be deleted
@@ -710,6 +917,13 @@ func (s *DNSService) ImportRecordsWithSync(ctx context.Context, records []DNSRec
 
 	// Create/update records from import
 	for _, record := range records {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
 		_, err := s.CreateRecord(ctx, record)
 		if err != nil {
 			log.Warn().

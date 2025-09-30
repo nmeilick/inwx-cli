@@ -11,12 +11,16 @@ output formats.
 ## Features
 
 *   **Complete DNS Management:** Create, update, delete, and list DNS records with full type support (A, AAAA, CNAME, MX, TXT, NS, etc.).
+*   **Interactive Mode:** Guided DNS record creation with prompts, validation, and preview.
+*   **DNS Validation:** Analyze DNS configurations for common issues (orphaned CNAMEs, missing targets, RFC violations).
+*   **DNS Verification:** Verify DNS propagation across multiple resolvers with real-time status updates.
 *   **Backup & Recovery:** Automatic backup of all DNS operations with rollback capability.
+*   **Batch Operations:** Update multiple records simultaneously.
 *   **Multiple Output Formats:** Table, JSON, YAML, and CSV output formats.
 *   **Bulk Operations:** Filter and operate on multiple records using wildcards and patterns.
-*   **Import/Export:** Backup domains as JSON or zonefile format *(import feature is work-in-progress)*.
+*   **Import/Export:** Backup domains as JSON or zonefile format.
 *   **Safety Features:** Dry-run mode, confirmation prompts, and operation limits.
-*   **Flexible Configuration:** TOML configuration files with XDG directory support.
+*   **Flexible Configuration:** TOML configuration files with XDG directory support and environment variables.
 *   **Cross-Platform:** Binaries available for Linux, Windows, and macOS.
 
 ## Installation
@@ -47,14 +51,46 @@ level = "warn"
 colors = true
 ```
 
-Instead of, or in addition to, the config file, you can also use environment variables (`INWX_USERNAME`, `INWX_PASSWORD`)
-or command-line flags.
+Instead of, or in addition to, the config file, you can also use environment variables or command-line flags.
+
+**Available environment variables:**
+- `INWX_USERNAME` - API username
+- `INWX_PASSWORD` - API password
+- `INWX_ENDPOINT` - API endpoint URL
+- `INWX_CONFIG` - Path to config file
+- `INWX_TIMEOUT` - Request timeout in seconds (default: 30)
 
 ## Usage
 
 ### DNS Record Management
 
 #### Creating Records
+
+**Interactive Mode:**
+
+The easiest way to create DNS records is using interactive mode, which guides you through the process with prompts and validation:
+
+```bash
+# Start interactive mode (auto-starts when no arguments provided)
+inwx dns create
+
+# Or explicitly enable interactive mode
+inwx dns create --interactive
+```
+
+Interactive mode will:
+- Prompt for hostname (e.g., www.example.com or example.com for root record)
+- Let you select the record type from a list (A, AAAA, CNAME, MX, TXT, NS, SRV, CAA)
+- Request content with type-specific help text and validation
+- Ask for TTL (default: 3600 seconds)
+- Request priority for MX and SRV records
+- Show a preview of the record before creation
+- Ask for confirmation before creating
+- Optionally wait for DNS propagation verification
+
+**Command-Line Mode:**
+
+You can also create records directly using flags:
 
 ```bash
 # Create an A record
@@ -68,6 +104,9 @@ inwx dns create -d example.com -t CNAME -n blog -c www.example.com
 
 # Create a TXT record for SPF
 inwx dns create -d example.com -t TXT -n @ -c "v=spf1 include:_spf.google.com ~all"
+
+# Preview changes before creating (dry-run mode)
+inwx dns create -d example.com -t A -n test -c 192.168.1.100 --dry-run
 ```
 
 #### Listing Records
@@ -97,6 +136,12 @@ inwx dns update --id 12345 -c 192.168.1.200
 
 # Update TTL and content
 inwx dns update --id 12345 -c 192.168.1.200 --ttl 7200
+
+# Preview changes before updating (dry-run mode)
+inwx dns update --id 12345 -c 192.168.1.200 --dry-run
+
+# Batch update multiple records at once (more efficient)
+inwx dns update --ids 12345,12346,12347 --ttl 3600
 ```
 
 #### Deleting Records
@@ -167,6 +212,52 @@ inwx domain list
 inwx account info
 ```
 
+### DNS Validation
+
+Validate your DNS configuration for common issues and best practices:
+
+```bash
+# Validate all domains
+inwx dns validate
+
+# Validate specific domain
+inwx dns validate -d example.com
+
+# Show only errors and warnings (hide info messages)
+inwx dns validate -d example.com --severity warning
+
+# Validation checks include:
+# - Orphaned CNAME records pointing to non-existent targets
+# - Missing MX/NS/SRV record targets
+# - CNAME conflicts (RFC 1034 violations)
+# - Common best practices (root record, www subdomain)
+# - Unusual TTL values
+```
+
+### DNS Verification
+
+Verify that your DNS changes have propagated to public DNS servers:
+
+```bash
+# Verify all records for a domain
+inwx dns verify -d example.com
+
+# Verify specific hostnames
+inwx dns verify www.example.com mail.example.com
+
+# Wait for propagation (up to timeout)
+inwx dns verify -d example.com --wait --timeout 300
+
+# Verify specific record types
+inwx dns verify -d example.com -t A,AAAA
+
+# The command checks:
+# - Record existence on authoritative nameservers
+# - Propagation to multiple public DNS resolvers (Google, Cloudflare, Quad9)
+# - Consistency across resolvers
+# - Time to propagation
+```
+
 ### Advanced Usage
 
 #### Bulk Operations with Filters
@@ -178,8 +269,14 @@ inwx dns delete -n "test*" --wildcard --max 50
 # List records with specific content
 inwx dns list -c "192.168.1.*" --wildcard
 
-# Update TTL for all A records
-inwx dns list -t A -o json | jq -r '.[].id' | xargs -I {} inwx dns update --id {} --ttl 3600
+# List records with specific TTL
+inwx dns list -d example.com --ttl 300
+
+# List records with specific priority
+inwx dns list -d example.com --prio 10
+
+# Update TTL for multiple A records in one batch operation
+inwx dns list -d example.com -t A -o json | jq -r '.[].id | @csv' | tr -d '"' | xargs -I {} inwx dns update --ids {} --ttl 3600
 ```
 
 #### Different Output Formats
@@ -256,10 +353,12 @@ inwx-cli looks for configuration files in the following order:
 ## Safety Features
 
 *   **Automatic Backups:** All DNS operations are automatically backed up and can be reverted.
-*   **Dry-Run Mode:** Use `--dry-run` to preview changes before applying them.
+*   **Dry-Run Mode:** Use `--dry-run` on create, update, and delete operations to preview changes before applying them.
+*   **DNS Validation:** Proactively detect configuration issues before they cause problems.
+*   **DNS Verification:** Confirm propagation of changes to public DNS servers.
 *   **Confirmation Prompts:** Interactive confirmation for destructive operations.
 *   **Operation Limits:** Built-in limits prevent accidental bulk deletions.
-*   **Detailed Logging:** Configurable logging levels for troubleshooting.
+*   **Detailed Logging:** Configurable logging levels
 
 ## License
 

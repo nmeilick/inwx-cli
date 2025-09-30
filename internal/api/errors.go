@@ -77,3 +77,25 @@ func NewAPIError(code int, message string) *APIError {
 		Message: message,
 	}
 }
+
+// HTTPError represents an HTTP-level error (non-200 status code)
+type HTTPError struct {
+	StatusCode int
+	Status     string
+}
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("HTTP error %d: %s", e.StatusCode, e.Status)
+}
+
+// IsRateLimitError returns true if this is an HTTP 429 rate limit error
+func (e *HTTPError) IsRateLimitError() bool {
+	return e.StatusCode == 429
+}
+
+func NewHTTPError(statusCode int, status string) *HTTPError {
+	return &HTTPError{
+		StatusCode: statusCode,
+		Status:     status,
+	}
+}

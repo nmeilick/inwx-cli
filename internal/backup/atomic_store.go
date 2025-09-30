@@ -36,9 +36,15 @@ func (s *AtomicStore) AtomicChange(operation inwx.OperationType, record inwx.DNS
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
+	// Generate secure ID
+	id, err := generateSecureID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate backup ID: %w", err)
+	}
+
 	// Create backup entry
 	entry := &inwx.BackupEntry{
-		ID:        generateSecureID(),
+		ID:        id,
 		Timestamp: time.Now(),
 		Operation: operation,
 		Record:    record,
@@ -108,15 +114,21 @@ func (s *AtomicStore) Save(operation inwx.OperationType, record inwx.DNSRecord, 
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
+	// Generate secure ID
+	id, err := generateSecureID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate backup ID: %w", err)
+	}
+
 	entry := &inwx.BackupEntry{
-		ID:        generateSecureID(),
+		ID:        id,
 		Timestamp: time.Now(),
 		Operation: operation,
 		Record:    record,
 		Context:   context,
 	}
 
-	_, err := s.writeBackupAtomic(entry)
+	_, err = s.writeBackupAtomic(entry)
 	if err != nil {
 		return nil, err
 	}
@@ -382,11 +394,10 @@ func (s *AtomicStore) removeUnsafe(entryID string) error {
 }
 
 // generateSecureID generates a cryptographically secure random ID
-func generateSecureID() string {
+func generateSecureID() (string, error) {
 	bytes := make([]byte, 16)
 	if _, err := rand.Read(bytes); err != nil {
-		// Fallback to timestamp-based ID if crypto/rand fails
-		return fmt.Sprintf("%d", time.Now().UnixNano())
+		return "", fmt.Errorf("failed to generate secure ID: %w", err)
 	}
-	return hex.EncodeToString(bytes)
+	return hex.EncodeToString(bytes), nil
 }

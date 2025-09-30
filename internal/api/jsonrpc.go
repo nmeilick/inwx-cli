@@ -7,9 +7,39 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/rs/zerolog/log"
 )
+
+// sanitizeForLogging redacts sensitive fields from JSON data
+func sanitizeForLogging(data []byte) []byte {
+	var obj map[string]interface{}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		// If we can't parse it, return as-is
+		return data
+	}
+
+	// Check if params exist and redact sensitive fields
+	if params, ok := obj["params"].(map[string]interface{}); ok {
+		// Redact password fields
+		if _, hasPass := params["pass"]; hasPass {
+			params["pass"] = "***REDACTED***"
+		}
+		if _, hasPassword := params["password"]; hasPassword {
+			params["password"] = "***REDACTED***"
+		}
+	}
+
+	// Re-marshal the sanitized data
+	sanitized, err := json.Marshal(obj)
+	if err != nil {
+		// If we can't re-marshal, return original
+		return data
+	}
+
+	return sanitized
+}
 
 type JSONRPCRequest struct {
 	Method string      `json:"method"`
@@ -27,15 +57,16 @@ type JSONRPCClient struct {
 	client   *http.Client
 	endpoint string
 	session  *Session
-	id       int
+	id       atomic.Int64
 }
 
 func NewJSONRPCClient(client *http.Client, session *Session) *JSONRPCClient {
-	return &JSONRPCClient{
+	c := &JSONRPCClient{
 		client:  client,
 		session: session,
-		id:      1,
 	}
+	c.id.Store(1)
+	return c
 }
 
 func (c *JSONRPCClient) SetEndpoint(endpoint string) {
@@ -50,19 +81,20 @@ func (c *JSONRPCClient) Call(ctx context.Context, method string, params interfac
 	request := JSONRPCRequest{
 		Method: method,
 		Params: params,
-		ID:     c.id,
+		ID:     int(c.id.Add(1)),
 	}
-	c.id++
 
 	requestBody, err := json.Marshal(request)
 	if err != nil {
 		return nil, err
 	}
 
+	// Sanitize request body before logging to avoid exposing passwords
+	sanitizedBody := sanitizeForLogging(requestBody)
 	log.Debug().
 		Str("method", method).
 		Str("endpoint", c.endpoint).
-		RawJSON("request", requestBody).
+		RawJSON("request", sanitizedBody).
 		Msg("JSON-RPC request")
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.endpoint, bytes.NewBuffer(requestBody))
@@ -103,7 +135,7 @@ func (c *JSONRPCClient) Call(ctx context.Context, method string, params interfac
 			Int("status_code", resp.StatusCode).
 			Str("status", resp.Status).
 			Msg("HTTP error response")
-		return nil, fmt.Errorf("HTTP error: %d", resp.StatusCode)
+		return nil, NewHTTPError(resp.StatusCode, resp.Status)
 	}
 
 	// Read the response body

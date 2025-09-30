@@ -71,8 +71,16 @@ func ValidateRecordContent(recordType, content string) error {
 }
 
 func validateIPv4(ip string) error {
+	// Check for IPv6 format (contains ':')
+	if strings.Contains(ip, ":") {
+		return fmt.Errorf("invalid IPv4 address (appears to be IPv6): %s", ip)
+	}
+
 	parsed := net.ParseIP(ip)
-	if parsed == nil || parsed.To4() == nil {
+	if parsed == nil {
+		return fmt.Errorf("invalid IP address: %s", ip)
+	}
+	if parsed.To4() == nil {
 		return fmt.Errorf("invalid IPv4 address: %s", ip)
 	}
 	return nil
@@ -87,15 +95,18 @@ func validateIPv6(ip string) error {
 }
 
 func validateTXT(content string) error {
-	if len(content) > 255 {
-		return fmt.Errorf("TXT record too long")
+	// DNS TXT records can contain multiple 255-character strings
+	// Most DNS servers support TXT records up to 4KB in practice
+	// Allow up to 4096 characters to support common use cases (DKIM, SPF, etc.)
+	if len(content) > 4096 {
+		return fmt.Errorf("TXT record too long (max 4096 characters)")
 	}
 	return nil
 }
 
 func validateSRV(content string) error {
 	parts := strings.Fields(content)
-	if len(parts) != 3 {
+	if len(parts) != 4 {
 		return fmt.Errorf("SRV record must have format: priority weight port target")
 	}
 
@@ -113,6 +124,11 @@ func validateSRV(content string) error {
 	port, err := strconv.Atoi(parts[2])
 	if err != nil || port < 0 || port > 65535 {
 		return fmt.Errorf("invalid SRV port: %s", parts[2])
+	}
+
+	// Validate target (should be a domain name)
+	if err := ValidateDomain(parts[3]); err != nil {
+		return fmt.Errorf("invalid SRV target: %w", err)
 	}
 
 	return nil

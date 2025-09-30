@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/rs/zerolog/log"
 )
 
 func ExportZonefile(records []DNSRecord, domain string) ([]byte, error) {
@@ -50,6 +52,10 @@ func ImportZonefile(data []byte, domain string) ([]DNSRecord, error) {
 
 		record, err := parseZoneRecord(line, domain)
 		if err != nil {
+			log.Warn().
+				Err(err).
+				Str("line", line).
+				Msg("Failed to parse zone record, skipping")
 			continue // Skip invalid records
 		}
 

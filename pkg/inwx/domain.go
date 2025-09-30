@@ -13,6 +13,7 @@ type Domain struct {
 	Status string `json:"status"`
 }
 
+// Domain creates a new domain service instance for managing domains
 func (c *Client) Domain() *DomainService {
 	return &DomainService{
 		client: c,
@@ -26,7 +27,13 @@ func (s *DomainService) List(ctx context.Context) ([]Domain, error) {
 	}
 
 	var domains []Domain
-	if resData, ok := response["resData"].(map[string]interface{}); ok {
+
+	// Safety check: ensure response is not nil
+	if response == nil {
+		return domains, nil
+	}
+
+	if resData, ok := response["resData"].(map[string]interface{}); ok && resData != nil {
 		if domainList, ok := resData["domain"].([]interface{}); ok {
 			for _, d := range domainList {
 				if domain, ok := d.(map[string]interface{}); ok {
